@@ -7,54 +7,32 @@ from pymavlink import mavutil
 from picamera2 import Picamera2
 import requests
 
-# Live logs — flush every print() immediately (important over SSH / terminal)
 sys.stdout.reconfigure(line_buffering=True)
 
 TARGET_ALTITUDE = 2
 HOVER_DURATION = 10
 CONNECTION_STRING = '/dev/ttyACM0'
 
-# ─── FLOW_HOLD SPECIFIC SETTINGS ─────────────────────────────────────────────
-# FLOW_HOLD relies on an optical flow sensor for XY hold and baro/rangefinder
-# for altitude. No GPS is required. The FC handles position hold natively —
-# Python only needs to manage the climb and monitor during the hover.
-#
-# Required ArduPilot parameters (set once via Mission Planner or GCS):
-#   FLOW_ENABLE    = 1         — enable optical flow sensor
-#   EK3_SRC1_VELXY = 5        — use optical flow as XY velocity source
-#   EK3_SRC1_POSZ  = 1        — use baro for Z (or 2 for rangefinder)
-#   RNGFND_TYPE    = <type>    — set to your rangefinder model if fitted
-#
-# If the FC rejects FLOW_HOLD arming, check:
-#   - FLOW sensor is healthy (Mission Planner: optical flow health in HUD)
-#   - EKF is initialised and innovations look good
-#   - Rangefinder (if used) is returning valid distance readings
-# ─────────────────────────────────────────────────────────────────────────────
 
-RC_NEUTRAL_HOVER = 1500      # PWM for hovering in ALT_HOLD climb fallback
-RC_CLIMB_PWM     = 1700      # PWM for climbing
-RC_DEADZONE      = 0.15      # Altitude error deadzone (m) for RC fallback
+RC_NEUTRAL_HOVER = 1500
+RC_CLIMB_PWM     = 1700
+RC_DEADZONE      = 0.15 
 
-# ─── FAILSAFE SETTINGS ────────────────────────────────────────────────────────
-FAILSAFE_TIMEOUT     = 4    # seconds of no heartbeat before GCS failsafe fires
+FAILSAFE_TIMEOUT     = 4 
 WATCHDOG_POLL_INTERVAL = 1.0
 
-# ─── BATTERY FAILSAFE SETTINGS ───────────────────────────────────────────────
-BATTERY_LOW_VOLTAGE  = 15.4  # 3.85 V/cell × 4S
+BATTERY_LOW_VOLTAGE  = 15.4
 BATTERY_POLL_INTERVAL = 2.0
-# ──────────────────────────────────────────────────────────────────────────────
 
 
-# ─── FAILSAFE STATE ───────────────────────────────────────────────────────────
 _last_heartbeat_time   = None
 _last_heartbeat_lock   = threading.Lock()
 _failsafe_triggered    = threading.Event()
 _watchdog_stop         = threading.Event()
 _battery_watchdog_stop = threading.Event()
 _pilot_takeover        = threading.Event()
-# ──────────────────────────────────────────────────────────────────────────────
 
-# Deep's code
+
 RC_TAKEOVER_NEUTRAL_PWM  = 1000
 RC_TAKEOVER_THRESHOLD    = 120
 RC_TAKEOVER_CONFIRM_COUNT = 3
@@ -127,8 +105,8 @@ def setup_ardupilot_gcs_failsafe(vehicle, timeout_sec=FAILSAFE_TIMEOUT):
     LAYER 1 — Hardware-level GCS failsafe (ArduPilot side).
 
     Parameters set:
-      FS_GCS_ENABLE  = 1  → enable GCS failsafe, action = LAND
-      FS_GCS_TIMEOUT      → seconds of silence before failsafe fires
+      FS_GCS_ENABLE  = 1  -> enable GCS failsafe, action = LAND
+      FS_GCS_TIMEOUT      -> seconds of silence before failsafe fires
     """
     print("Setting up ArduPilot GCS failsafe parameters (Layer 1)...")
     try:
@@ -147,9 +125,9 @@ def setup_ardupilot_battery_failsafe(vehicle, low_voltage=BATTERY_LOW_VOLTAGE):
     LAYER 1 — Hardware-level battery failsafe (ArduPilot side).
 
     Parameters set:
-      FS_BATT_ENABLE  = 1    → enable battery failsafe
-      FS_BATT_VOLTAGE = 15.4 → trigger voltage (V) for a 4S LiPo
-      FS_BATT_MAH     = 0    → disable mAh-based failsafe (voltage only)
+      FS_BATT_ENABLE  = 1    -> enable battery failsafe
+      FS_BATT_VOLTAGE = 15.4 -> trigger voltage (V) for a 4S LiPo
+      FS_BATT_MAH     = 0    -> disable mAh-based failsafe (voltage only)
     """
     print("Setting up ArduPilot battery failsafe parameters (Layer 1)...")
     try:
@@ -282,7 +260,6 @@ def stop_failsafe_watchdog(vehicle):
     print("GCS failsafe watchdog deactivated.")
 
 
-# ─── BATTERY FAILSAFE (LAYER 2) ───────────────────────────────────────────────
 
 def _battery_watchdog_thread(vehicle, low_voltage):
     """
@@ -346,7 +323,6 @@ def stop_battery_watchdog():
     print("Battery failsafe watchdog deactivated.")
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 
 def safe_mode_name(vehicle):
     try:
@@ -630,7 +606,6 @@ def hover_flow_hold(vehicle, duration, target_altitude, use_rc_fallback=False):
         alt   = vehicle.location.global_relative_frame.alt
         error = target_altitude - alt
 
-        # ── THROTTLE MANAGEMENT ──────────────────────────────────────────
         # FLOW_HOLD manages XY on the FC; throttle is still our responsibility
         # when flying via MAVLink (no pilot RC).
         if use_rc_fallback:
@@ -645,7 +620,6 @@ def hover_flow_hold(vehicle, duration, target_altitude, use_rc_fallback=False):
             thrust = clamp(thrust, 0.65, 0.80)
             # No manual XY correction needed — FLOW_HOLD handles that.
             send_attitude_thrust(vehicle, roll_deg=0.0, pitch_deg=0.0, thrust=thrust)
-        # ────────────────────────────────────────────────────────────────
 
         if step % int(1 / update_interval) == 0:
             remaining = max(0, duration - int(step * update_interval))
@@ -656,7 +630,6 @@ def hover_flow_hold(vehicle, duration, target_altitude, use_rc_fallback=False):
                 f"Vn: {vn:+.2f} Ve: {ve:+.2f}"
             )
 
-        # ── PER-INTERVAL PHOTO CAPTURE ───────────────────────────────────
         now = time.time()
         if now - last_photo_time >= PHOTO_INTERVAL:
             photo_index = len(captured_images) + 1
@@ -683,7 +656,6 @@ def hover_flow_hold(vehicle, duration, target_altitude, use_rc_fallback=False):
                     except Exception:
                         pass
             last_photo_time = now
-        # ────────────────────────────────────────────────────────────────
 
         time.sleep(update_interval)
 
@@ -766,21 +738,17 @@ def main():
         except Exception:
             pass
 
-        # ── FLOW_HOLD PARAMETER SETUP ────────────────────────────────────
         setup_flow_hold_parameters(vehicle)
 
-        # ── OPTICAL FLOW SENSOR HEALTH CHECK ────────────────────────────
         flow_ok = check_flow_sensor_health(vehicle)
         if not flow_ok:
             print("WARNING: Optical flow sensor not healthy. Proceeding with caution.")
             print("         XY position hold will be unreliable without a working flow sensor.")
 
-        # ── FAILSAFE SETUP ───────────────────────────────────────────────
         setup_ardupilot_gcs_failsafe(vehicle, timeout_sec=FAILSAFE_TIMEOUT)
         setup_ardupilot_battery_failsafe(vehicle, low_voltage=BATTERY_LOW_VOLTAGE)
         watchdog_thread = start_failsafe_watchdog(vehicle, timeout=FAILSAFE_TIMEOUT)
         battery_thread  = start_battery_watchdog(vehicle, low_voltage=BATTERY_LOW_VOLTAGE)
-        # ─────────────────────────────────────────────────────────────────
 
         arm_drone(vehicle, force=True)
 
