@@ -24,7 +24,7 @@ This repo includes projects developed as part of:
 
 ###  ADDC – Autonomous Drone Development Challenge
 
-📌 **Focus:** UAV control systems, telemetry GUI, and real-time vision integration  
+**Focus:** UAV control systems, telemetry GUI, and real-time vision integration  
 
 ####  Key Work:
 - Integrated **ArduPilot + MAVLink** for UAV communication  
